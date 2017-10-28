@@ -1,37 +1,54 @@
+# Importing necessary libraries
+library(tidyverse)
+library(caret)
+library(doParallel)
+library(sampling)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+
 # Importing code stored in other files
-source("collect-data.R")
+source("clean-data.R")
 
-# Storing the years I will be examining, split up by President
-collect_all <- function() {
-  bush_2001 <- collect_dat(2001)
-  bush_2002 <- collect_dat(2002)
-  bush_2003 <- collect_dat(2003)
-  bush_2004 <- collect_dat(2004)
-  bush_2005 <- collect_dat(2005)
-  bush_2006 <- collect_dat(2006)
-  bush_2007 <- collect_dat(2007)
-  bush_2008 <- collect_dat(2008)
-  obama_2009 <- collect_dat(2009)
-  obama_2010 <- collect_dat(2010)
-  obama_2011 <- collect_dat(2011)
-  obama_2012 <- collect_dat(2012)
-  obama_2013 <- collect_dat(2013)
-  obama_2014 <- collect_dat(2014)
-}
+# Save the data for further use
+save(list = ls(), file = "../dat.rda")
 
-save_all <- function() {
-  save_dat(bush_2001)
-  save_dat(bush_2002)
-  save_dat(bush_2003)
-  save_dat(bush_2004)
-  save_dat(bush_2005)
-  save_dat(bush_2006)
-  save_dat(bush_2007)
-  save_dat(bush_2008)
-  save_dat(obama_2009)
-  save_dat(obama_2010)
-  save_dat(obama_2011)
-  save_dat(obama_2012)
-  save_dat(obama_2013)
-  save_dat(obama_2014)
-}
+# Data collection already done in the first project
+load(file = "../dat.rda")
+
+# Data Cleaning
+dat <- clean_dat(dat)
+
+# Check for class imbalance
+by_class <- group_by(dat, pay)
+class_stats <- summarize(by_class,
+                         count = n())
+
+ggplot(class_stats, aes(x = pay, y = count)) +
+  geom_col()
+
+# Rebalancing
+id <- strata(dat, stratanames="pay", 
+             size=c(10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000), method="srswr")
+dat_balanced <- dat[id$ID_unit, ]
+table(dat_balanced$pay)
+
+# Split dataset
+index <- createDataPartition(dat_balanced$pay, p=0.8, list=FALSE)
+train_set <- dat_balanced[ index,]
+test_set <- dat_balanced[-index,]
+
+# Create fixed sampling scheme
+train <- createFolds(train_set$pay,k=10)
+
+# Enable multicore processing
+registerDoParallel()
+
+# First model: Predicting pay with rpart
+rpart_fit <- train(pay ~ .,  data = train_set, method = "rpart",
+                tuneLength = 10,
+                trControl = trainControl(
+                  method = "cv", indexOut = train))
+rpart_fit
+rpart.plot(rpart_fit$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+table(rpart_fit$maximize)

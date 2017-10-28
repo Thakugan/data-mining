@@ -1,6 +1,0 @@
-\contentsline {section}{\numberline {1}Business Understanding}{2}
-\contentsline {section}{\numberline {2}Data Understanding}{2}
-\contentsline {subsection}{\numberline {2.1}Collecting Data}{2}
-\contentsline {section}{\numberline {3}Data Preparation}{3}
-\contentsline {section}{\numberline {4}Modeling}{3}
-\contentsline {section}{\numberline {5}Evaluation}{3}
