@@ -31,7 +31,7 @@ clean_dat <- function(dat) {
   
   # Creating pay
   dat <- mutate(dat,
-                pay = ifelse(as.numeric(Pay) < 200000, (((as.numeric(Pay) %/% 25000) + 1 ) * 25000), 200000))
+                pay = ifelse(as.numeric(Pay) < 200000, as.character(((as.numeric(Pay) %/% 25000) + 1 ) * 25000), as.character(200000)))
   
   # Get rid of small agencies
   agencies <- names(which(table(dat$Agency)>10000))
@@ -64,7 +64,7 @@ clean_dat <- function(dat) {
   # TODO Change attributes to continuous values
   # Make sure each attribute is the correct type
   dat <- mutate(dat,
-                pay = as.character.numeric_version(pay),
+                pay = as.factor(pay),
                 agency = as.character(agency),
                 state = as.character(state),
                 age = as.numeric(substr(age, start = 1, stop = 2)),

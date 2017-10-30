@@ -2,21 +2,26 @@
 title: "Predictive Model for Federal Wages"
 author: "Jenn Le"
 date: "10/24/2017"
-output: pdf_document
+output:
+  rmarkdown::pdf_document:
+    fig_caption: yes        
+    includes:  
+      in_header: preamble-latex.tex
 ---
 
 ```{r setup, include=FALSE}
 library(tidyverse)
 library(knitr)
+library(caret)
 library(rpart.plot)
-load(file = "dat.rda")
+load(file = "report_dat.rda")
 knitr::opts_chunk$set(echo=FALSE,
                message=FALSE, warning=FALSE)
 ```
 
 \abstract
 
-Some stuff for an abstract here
+This investigation examines several CART models built to perform classification of federal employment data. The models aim to predict employee salaries, education, and supervisory statuses for the years 2001, 20015, 2009, and 2013 with a particular emphasis on 2005 and 2013 when predicting pay. Feature importance is examined for each model to determine the factors that affect an employee's pay in an attempt to help prospective employees make decisions about their career path. Classification of this highly varied data is found to be inaccurate when using decision trees but close enough for this business case to be useful.
 
 \newpage
 \tableofcontents
@@ -24,10 +29,12 @@ Some stuff for an abstract here
 
 # Business Understanding
 
+Observing and predicting trends in government employment data is important to both prospective government employees as well as the government themselves. Prospective employees that know what to expect in terms of compensation according to their credentials and the job conditions can make more informed choices when deciding where to work or whether or not to get a more advanced degree. The government can make use of these models to figure out if an employee is being paid too little or too much compared to others in the same situation. This can results in better informed raises or offers for new employees. Looking at the factors that affect employee salaries can also help to give a better understanding of the differences in presidential terms.
+
 # Data Preparation
 ## Cleaning
 
-For this project, I started with uncleaned data from the non-department of defense data from the years 2001, 2005, 2009, and 2013. Since there is so much data, I decided that removing any NA's or unknowns would be more beneficial to the predictive model than imputing data. I chose to leave duplicate ID's alone because they could indicate a pay raise based on a new degree or change of agency. I then removed the psuedo ID and name features since they are not meaningful to the class that I am trying to predict. To make the data more meaningful at a glance, I also chose to replace encoded nominal attributes in the data with their actual values such as replacing the station codes with the cooresponding states. However, since decision trees are slow with ordinal and nominal attributes that have a lot of possible values, I converted the date, age, education, length of service, supervisory status, appointment and NSFTP into continuous values. I also removed any agencies that had less than 10,000 members so I could focus on larger agencies. After doing all of this, there are 12801507 records left from the original 19645240 which is about 65.16%.
+For this project, I started with uncleaned data from the non-department of defense data from the years 2001, 2005, 2009, and 2013. Since there is so much data, I decided that removing any NA's or unknowns would be more beneficial to the predictive model than imputing data. I chose to leave duplicate ID's alone because they could indicate a pay raise based on a new degree or change of agency. I then removed the psuedo ID and name features since they are not meaningful to the class that I am trying to predict. To make the data more meaningful at a glance, I also chose to replace encoded nominal attributes in the data with their actual values such as replacing the station codes with the cooresponding states. However, since decision trees are slow with ordinal and nominal attributes that have a lot of possible values, I converted the date, age, education, length of service, supervisory status, appointment and NSFTP into continuous values. I also removed any agencies and states that had less than 10,000 members so I could focus on environments people are more likely to pursue a career in. After doing all of this, there are 12801507 records left from the original 19645240 which is about 65.16%.
 
 To create the classes, I rounded up pay to the closest multiple of $25,000 and treated any salaries above \$200,000 to be the same. I decided to do this in order to retain the meaning that ordinals have in relation to one another while encapsulating a range of values. I chose to leave the date attribute in rather than correcting for inflation to see if my feature selection method would pick up a strong relationship between date and pay. In addition, I renamed the features to make them more consistent with the code.
 
@@ -47,9 +54,9 @@ I used the consistency method from FSelector to select a subset of the features.
 | Category | Nominal | Type of work the employee does |
 | Supervisory Status | Nominal | Employee's authority |
 
-\label{table:final_data}
+Table: Dataset Features
 
-Table \ref{table:final_data} shows the features that are used in this project along with their scales and descriptions.
+Table 1 shows the features that are used in this project along with their scales and descriptions.
 
 
 # Modeling
@@ -57,22 +64,340 @@ Table \ref{table:final_data} shows the features that are used in this project al
 
 I first graphed the class counts to determine if there is a class imbalance.
 
-```{r class_counts}
+```{r class_counts, fig.cap='Class Counts'}
 ggplot(class_stats, aes(x = pay, y = count)) +
   geom_col() +
   labs(x = "Pay", y = "Count")
 ```
 
-Figure 1 shows that the data is 
+Figure 1 shows that the data is unimodal and skewed right. The most instances lie between \$25,000 and \$50,000 and decrease as the range gets larger. With the class distribution like this, it is likely that any models created will completely ignore the classes 25000, 150000, 175000, and 200000.
 
-I decided to balance the classes and use 20% holdout to split the data into training and testing sets. For training, I created splits using 10-fold cross validation and used these splits for each of the models I trained in order to stay consistent.
+I decided to balance the classes by downsampling and then using 20% holdout to split the balanced data into training and testing sets. For training, I used the 10-fold cross validation built into caret.
 
-## Price CART Model
+## Price Prediction
+### General
 
-```{r price_rpart}
-rpart.plot(rpart_fit$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+The first prediction model I created was trained on data from 2001, 2005, 2009, and 2013 and predicts the pay range of an employee based on the features listed in table 1. The data was first balanced with 10,000 instances of each class.
+Using a decision tree for this classification allows for transparency in our model which helps us understand how each factor affects the pay of an employee. In this model, there are two features with many possible values, state and agency, which can be examined closely using a decision tree. This information would be lost in a more black box approach.
+
+```{r pay, fig.cap='Pay Prediction CART Model'}
+rpart.plot(pay_fit$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
 ```
+
+Figure 2 shows the decision tree generated by the model. From this tree, we can see that this model deems education to be the most important factor in an employee's pay. The cutoff for education here is a master's degree so according to this model, getting at least a master's degree would be more beneficial to a prospective employee than going to work sooner. It also shows, however, that an employee with a lower education level can hope to make a lot of money depending on the type of work they do with a large pay increase if they work in the Federal Aviation Administration. This detailed model shows us that the agencies that have the highest affect on pay are the Federal Aviation Administration and the Veteran's Health Administration. Prospective employees with a lower education level should aim to work in the Federal Aviation Administration while ones with a higher education level should aim for the Veteran's Health Administration.
+
+```{r pay_pred_results}
+kable(confusionMatrix(data = pay_pred, test_set$pay)[[3]])
+```
+
+Table: Pay Prediction Results
+
+```{r pay_pred_confusion}
+kable(confusionMatrix(data = pay_pred, test_set$pay)[[2]])
+```
+
+Table: Pay Prediction Confusion Matrix
+
+Table 2 shows that the accuracy of this model on the cooresponding training data is much less than desired with an even lower kappa statistic. This is expected, however, since the data I am working with is much too complicated for a decision tree to perform well. Table 3 shows that while the predictions are inaccurate, they are not too far off from their actual values. Because our business case is more focused on a general idea of whether or not a certain change in a factor will increase pay, the performance of this model is perfectly acceptable. 
+
+```{r pay_pred}
+kable(confusionMatrix(data = pay_pred, test_set$pay)[[4]][,1:6])
+```
+
+Table: Pay Prediction Class Statistics
+
+Table 4 shows detailed statistics on each of the classes for this prediction model. One point that stands out is that 125000 has a sensitivity of 0 and a specificity of 1 because the model did not predict a single instance of this class. 
+
+### President Bush
+
+I trained the CART model on data specifically from the year 2005 to see how the same features had affected pay during President Bush's term in office, especially in comparison to President Obama's term.
+
+```{r pay_2005, fig.cap='Pay Prediction 2005 CART Model'}
+rpart.plot(pay_fit_2005$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+Figure 3 shows that supervisory status is the most important feature in this model. Higher authority can expect to make much more in most cases. With a lower level of authority, however, working for the Federal Aviation Administration or having a higher level of education is then the best bet for a higher salary.
+
+```{r pay_pred_results_2005}
+kable(confusionMatrix(data = pay_pred_2005, test_set_2005$pay)[[3]])
+```
+
+Table: Pay Prediction 2005 Results
+
+```{r pay_pred_confusion_2005}
+kable(confusionMatrix(data = pay_pred_2005, test_set_2005$pay)[[2]])
+```
+
+Table: Pay Prediction 2005 Confusion Matrix
+
+Table 5 shows that the kappa statistic for this model is higher than the model shown in table 2. This could probably be attributed to the fact that the supervisory status in this model is more indicative of an employee's pay range and only further takes into account which agency they work in. On the other hand, the previous model includes a lot more choices that are also more varied. The two models are similar in that their predictions are typically not far off from the actual values. 
+
+```{r pay_pred_2005}
+kable(confusionMatrix(data = pay_pred_2005, test_set_2005$pay)[[4]][,1:6])
+```
+
+Table: Pay Prediction 2005 Class Statistics
+
+Table 6 shows that this training set did not predict any values of 100000. This could be because the model is being trained to skew towards more extreme values and as a result, always choose a lower or higher range rather than the neutral one.
+
+### President Obama
+
+I trained data exclusively from 2013 under the same conditions as the two previous models in order to draw a comparison between the three and examine how the factors that affect pay change across presidential terms. The transparency of decision trees allows us to look at how similarly decisions are made and make comparisons about the overall structure of the model.
+
+```{r pay_2013, fig.cap='Pay Prediction 2013 CART Model'}
+rpart.plot(pay_fit_2013$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+Figure 4 shows that this model follows a similar pattern to the general pay prediction model, shown in figure 2. Education is the most important feature, with the cutoff at the master's degree level. The difference is that this model does not place an emphasis on supervisory status. After education, the most important features are the length of service as well as the type of work being done.
+
+```{r pay_pred_results_2013}
+kable(confusionMatrix(data = pay_pred_2013, test_set_2013$pay)[[3]])
+```
+
+Table: Pay Prediction 2013 Results
+
+```{r pay_pred_confusion_2013}
+kable(confusionMatrix(data = pay_pred_2013, test_set_2013$pay)[[2]])
+```
+
+Table: Pay Prediction 2013 Confusion Matrix
+
+Table 8 shows that the accuracy and kappa score of this model are similar to those of the first model. This makes sense seeing as how the structure of both decision trees are also very similar to one another. 
+
+```{r pay_pred_2013}
+kable(confusionMatrix(data = pay_pred_2013, test_set_2013$pay)[[4]][,1:6])
+```
+
+Table: Pay Prediction Class Statistics
+
+Table 10 shows that no instances of 75000 were predicted this time. The fact that the class that gets ignored is decreasing each time is suspicious and with more time, I would investigate this further.
+
+### Comparison
+
+| Rank | General | Bush | Obama |
+| ---- | -------- | ---------------- | -------- |
+| 1 | Education (100.00) | Supervisory Service (100.00) | Education (100.00) |
+| 2 | Length of Service (40.79) | Category C (87.96) | Length of Service (43.93) |
+| 3 | Veteran's Health Administration (28.50) | Category T (76.19) | Category T (27.72) |
+| 4 | Category T (27.01) | National Institutes of Health (72.67) | Veteran's Health Administration (26.76) |
+| 5 | Category C (19.58) | Category B (60.05) | Category C (13.93) |
+
+Table: Pay Prediction Variable Importance Comparison
+
+Table 11 shows that the general pay prediction model I trained is much more similar to the model trained with Obama's term than Bush's. This could be because the random sampling done for the general model picked up more instances that fell under Obama's jurisdiction. The model trained with 2005 data finds supervisory status and category to be the most important features while the model trained with 2013 data finds education and length of service to be the most important. It seems like during Bush's term, pay was dictated by the authority you have and the type of work you do. On the other hand, qualification and experience dictated the pay during Obama's term. This could be due to a change in values between the presidents but I feel that it's much more likely to be attributed to a demographic shift that happened in the U.S. in general where more and more people were getting bachelor's degrees so more and more importance was being put upon attaining even higher levels of education. 
+
+In each of these pay prediction models, state has not been a factor at all. It turns out that this is because the government has a fixed pay scheme so that location does not affect pay. Knowing this information could help a prospective employee make the decision about where to work. It is important to know because making $100,000 in Texas goes much further than making the same amount of money in a state with a higher cost of living such as California or New York.
+
+## Minimized Price Prediction
+
+The feature selection I did using FSelector did not include agency or state so I decided to create a pay prediction model leaving out these features to see if they hindered my original model in any way. Using fewer features could help the decision tree make more definite splits. The fact that the two features that included a lot of possible values have been removed also means a faster training time for this model as well as a chance to get a clearer understanding of the relationships between the remaining features. However, the models shown in figures 2 and 4 have shown that some splits depend entirely on agency so the accuracy of this model may be negatively impacted by the removal of the feature.
+
+```{r pay_min, fig.cap='Minimized Pay Prediction CART Model'}
+rpart.plot(pay_fit_min$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+```{r pay_pred_varimpm_min, fig.cap='Minimized Pay Prediction Variable Importance'}
+dotPlot(varImp(pay_fit_min, compete=FALSE))
+```
+
+Figures 5 and 6 show that education is the most important factor by far in this model. However, figure 5 also shows that at lower levels of education, length of service and the type of work being done have more of an impact while at higher levels of education, supervisory status has more of an impact. 
+
+```{r pay_pred_results_min}
+kable(confusionMatrix(data = pay_pred_min, test_set$pay)[[3]])
+```
+
+Table: Minimized Pay Prediction Results
+
+Table 12 shows that the accuracy score and kappa statistic of this model is lower than the first but not by very much at all. In addition, the training time of this is faster so in the case where agency doesn't matter too much, it could be more beneficial to use this model. 
+
+```{r pay_pred_confusion_min}
+kable(confusionMatrix(data = pay_pred_min, test_set$pay)[[2]])
+```
+
+Table: Minimized Pay Prediction Confusion Matrix
+
+```{r pay_pred_min}
+kable(confusionMatrix(data = pay_pred_min, test_set$pay)[[4]][,1:6])
+```
+
+Table: Minimized Pay Prediction Class Statistics
+
+Tables 13 and 14 show that this model follows the same pattern as the previous models. Although the accuracy of the predictions is low, the predictions are typically close enough to the actual values that they would not make much of a difference when making career decisions.
+
+## Price Prediction Between Agencies
+
+After looking at the general pay prediction models, I wanted to take a more in depth look at how certain factors affect pay within different agencies. To do so, I trained decision trees on the three biggest agencies in the dataset, Internal Revenue Services, the Social Security Administration, and the Veteran's Health Administration. Each model was trained in the same circumstances as the previous models with 10,000 instances of each class split into training and testing sets.
+
+These models will be useful for employees that already know they want to work at one of these agencies and want to know how they can increase their chances at a higher salary. Without having to look at agency, these models will also be faster to train.
+
+### Internal Revenue Services
+
+```{r pay_irs, fig.cap='Pay Prediction IRS CART Model'}
+rpart.plot(pay_fit_irs$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+```{r pay_pred_varimpm_irs, fig.cap='Pay Prediction IRS Variable Importance'}
+dotPlot(varImp(pay_fit_irs, compete=FALSE))
+```
+
+Figures 7 and 8 show that the type of work being done and length of service are the most important factors in determining the pay of an IRS employee. Supervisory status is also important but education is not. We can probably assume that this is because employees within the IRS have similar education levels unless they have more authority in which case they have a higher education level so the model views the two factors to be one and the same.
+
+```{r pay_pred_results_irs}
+kable(confusionMatrix(data = pay_pred_irs, test_set_irs$pay)[[3]])
+```
+
+Table: IRS Pay Prediction Results
+
+Tables 15 shows that the accuracy score and kappa statistic of this model is much higher than the previous ones. This is probably because the decision tree can make more definitive choices since it does not have to take agency into account. It is much more accurate than the minimized pay prediction model shown in figure 5 though because it does not completely disregard agency.
+
+```{r pay_pred_confusion_irs}
+kable(confusionMatrix(data = pay_pred_irs, test_set_irs$pay)[[2]])
+```
+
+Table: IRS Pay Prediction Confusion Matrix
+
+```{r pay_pred_irs}
+kable(confusionMatrix(data = pay_pred_irs, test_set_irs$pay)[[4]][,1:6])
+```
+
+Table: IRS Pay Prediction Class Statistics
+
+Tables 16 and 17 show that there is an even lower distribution range in the model's prediction than with previous models. This makes this model much more useful because there are not as many outliers in the predictions so we can expect the predicted range to be close enough to its actual range to be useful.
+
+### Social Security Administration
+
+```{r pay_ssa, fig.cap='Pay Prediction SSA CART Model'}
+rpart.plot(pay_fit_ssa$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+```{r pay_pred_varimpm_ssa, fig.cap='Pay Prediction SSA Variable Importance'}
+dotPlot(varImp(pay_fit_ssa, compete=FALSE))
+```
+
+Figures 9 and 10 show that the SSA model follows the same trend as the IRS model. However, the SSA has an additional category that is looks at and places more importance on supervisory status than length of service.
+
+```{r pay_pred_results_ssa}
+kable(confusionMatrix(data = pay_pred_ssa, test_set_ssa$pay)[[3]])
+```
+
+Table: SSA Pay Prediction Results
+
+Table 18 shows that this model has an even higher accuracy score and kappa statistic than the IRS model. 
+
+```{r pay_pred_confusion_ssa}
+kable(confusionMatrix(data = pay_pred_ssa, test_set_ssa$pay)[[2]])
+```
+
+Table: SSA Pay Prediction Confusion Matrix
+
+```{r pay_pred_ssa}
+kable(confusionMatrix(data = pay_pred_ssa, test_set_ssa$pay)[[4]][,1:6])
+```
+
+Table: SSA Pay Prediction Class Statistics
+
+Tables 19 and 20 show that the predictions are more precise, reenforcing the idea that focusing on specific agencies in prediction is more useful than looking at the data as a whole.
+
+### Veteran's Health Administration
+
+```{r pay_vha, fig.cap='Pay Prediction VHA CART Model'}
+rpart.plot(pay_fit_vha$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+```{r pay_pred_varimpm_vha, fig.cap='Pay Prediction VHA Variable Importance'}
+dotPlot(varImp(pay_fit_vha, compete=FALSE))
+```
+
+Figures 11 and 12 show that education is the most important factor in the VHA. This is different from the IRS and SSA models which didn't seem to care much about education. Category is still an important factor in this model but surprisingly, so is the state of California. This does not make sense considering what we know about how location should not affect pay in the federal government.
+
+```{r pay_pred_results_vha}
+kable(confusionMatrix(data = pay_pred_vha, test_set_vha$pay)[[3]])
+```
+
+Table: VHA Pay Prediction Results
+
+Table 21 shows us that the accuracy score and kappa statistic of this model are similar to those of the general pay prediction model. This could explain why the state of California appeared as an important factor in this model. The other features were varied enough that a feature that should not have been important at all became important in comparison.
+
+```{r pay_pred_confusion_vha}
+kable(confusionMatrix(data = pay_pred_vha, test_set_vha$pay)[[2]])
+```
+
+Table: VHA Pay Prediction Confusion Matrix
+
+```{r pay_pred_vha}
+kable(confusionMatrix(data = pay_pred_vha, test_set_vha$pay)[[4]][,1:6])
+```
+
+Table: VHA Pay Prediction Class Statistics
+
+Tables 22 and 23 show that this model does not have as many extremely inaccurate predictions as the general model but it does have a lot more than the IRS and SSA models. This tells us that looking at specific agencies rather than the entire dataset is only useful in certain cases where the data in the agency does not vary too much.
+
+## Education Prediction
+
+In addition to predicting pay, I wanted to see if this data would be useful in predicting education. The CART method is used in this case as well because it is flexible in handling different types of data and is great for visualizing the detailed relationships between features. Since there are so many different education classes, I balanced the data by downsampling 5,000 instances of each class and then splitting the data into training and testing sets. 
+
+```{r edu, fig.cap='Education Prediction CART Model'}
+rpart.plot(edu_fit$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+```{r edu_pred_varimpm, fig.cap='Education Prediction Variable Importance'}
+dotPlot(varImp(edu_fit, compete=FALSE))
+```
+
+Figures 13 and 14 show that agency and category are the most important features of this model. This might be because pay and length of service vary a lot even within educational levels so the model does not know what to do with them. On the other hand, some types of work are only available to people that have a certain education level.
+
+```{r edu_pred_results}
+kable(confusionMatrix(data = edu_pred, test_set_edu$education)[[3]])
+```
+
+Table: Education Prediction Results
+
+```{r edu_pred}
+kable(confusionMatrix(data = edu_pred, test_set_edu$education)[[4]][,1:6])
+```
+
+Table: Education Prediction Class Statistics
+
+Tables 24 and 25 show that this model performs terribly and many classes are not predicted at all. Even 13 is never predicted which, as seen in Project 1, is one of the most frequently occuring education classes. This model would not be useful in any case since it seems to be prone to guessing either really low education levels or really high even though the highest occurences would be in the middle.
+
+## Supervisory Status Predicion
+
+I also wanted to see if this data would be useful in predicting supervisory status. The CART method is used and I balanced the data by downsampling 20,000 instances of each class and then splitting the data into training and testing sets. I did this because there are less possible values for supervisory status or pay and education. Using a decision tree for this model is a good idea because of the flexibility of how it handles different data types as well as how its simplicity and quick training time are great for models that don't require high precision.
+
+```{r ss, fig.cap='Supervisory Status Prediction CART Model'}
+rpart.plot(ss_fit$finalModel, extra = 2, under = TRUE, varlen=0, faclen=0)
+```
+
+```{r ss_pred_varimpm, fig.cap='Supervisory Status Prediction Variable Importance'}
+dotPlot(varImp(ss_fit, compete=FALSE))
+```
+
+Figures 15 and 16 show that pay and agency are the best indicators of supervisory status. This makes sense because higher levels of authority almost always go along with a higher salary. This also indicates that specific agencies have higher levels of authority in general than others.
+
+```{r ss_pred_results}
+kable(confusionMatrix(data = ss_pred, test_set_ss$supervisory_status)[[3]])
+```
+
+Table: Supervisory Status Prediction Results
+
+```{r ss_pred_confusion}
+kable(confusionMatrix(data = ss_pred, test_set_ss$supervisory_status)[[2]])
+```
+
+Table: Supervisory Status Prediction Confusion Matrix
+
+```{r ss_pred}
+kable(confusionMatrix(data = ss_pred, test_set_ss$supervisory_status)[[4]][,1:6])
+```
+
+Table: Supervisory Status Prediction Class Statistics
+
+Tables 26, 27, and 29 show that the performance of the supervisory status model are similar to the general pay prediction model. This indicates the close relationship between the two features. However, this model is not very useful since an employee cannot decide their own supervisory status.
 
 # Evaluation and Deployment
 
-My models would be useful for anyone looking to get a job with the federal government. They can see how much they can expect to receive in compensation in certain departments and states based on their education level. 
+The models created here have fairly low accuracies but when taking into account the fact that false predictions are typically fairly close to the actual values, these models could still be useful for prospective government employees. They can get a fair estimate of how much they can expect to receive in compensation in certain departments and states based on their qualifications. 
+
+These models are also extremely transparent and show how each factor affects pay. This helps employees make detailed decision about where to work or whether or not to go back to school based on their specific circumstances. We saw in figure 2 that employees with a lower education level could expect to make a lot more money by working for the Federal Aviation Administration.
+
+Current employees can also asses these models to see if they are being paid a fair salary in comparison to others with the same qualifications and in the same circumstances. They can also see if they make similar salaries to those of the same authority levels.
