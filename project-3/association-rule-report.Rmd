@@ -1,0 +1,306 @@
+---
+title: "Association Rule Mining"
+author: "Jenn Le"
+date: "11/3/2017"
+output:
+  rmarkdown::pdf_document:
+    fig_caption: yes        
+    includes:  
+      in_header: preamble-latex.tex
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(arules)
+library(arulesViz)
+library(knitr)
+load(file = "dat.rda")
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+\abstract
+
+This is an investigation of federal employment data for the years 2005 and 2013 to evaluate the characteristics of employment during President Bush and President Obama's terms and how they differ from one another. Transaction datasets are created and frequent, closed, and maximal itemsets are examined to gain insight on the patterns that occur in federal employment. A further look at employees with a lower level of education or a shorter length of service helps to determine in what directions less competitive employees can go in order to maximize their pay.
+
+\newpage
+\tableofcontents
+\newpage
+
+# Business Understanding
+
+In this paper, I investigate the federal payroll data for the years 2005 and 2013 to look for unusual trends and differences between the two years using association rule mining. 2005 is during the middle of President Bush's term and 2013 is during the middle of President Obama's. Looking at this data can help show how federal employment changes along with policy changes and paradigm shifts across the country. A closer look at trends that may be common sense such as higher education equating to higher pay can reveal certain rules that are exceptions to these common trends. Information such as this can help prospective employees who are not as competitive direct their job search towards situations that are more favorable to them.
+
+# Data Preparation
+
+The data I used in this project was taken from the 2005 and 2013 non-department of defense data that I had previously cleaned for project 2. This included getting rid of all unknowns, rounding up pay to the closest multiple of $25,000 and treating any salaries above \$200,000 to be the same, and making features continuous where possible. 
+
+## Preprocessing
+
+In addition, I decided to condense education into four values, 1, 2, 3, and 4. I would represent no high school education as a 1, a high school degree and some college as a 2, a bachelor's or professional degree as a 3, and anything more as a 4. 
+
+I removed the features pesudo ID, name, and date since they do not affect any of the other features. I also removed occupation because it classifies the employee as a blue or white collar worker and category encodes the same information for the most part. I then discretized age and length of service based on frequency. I kept pay discretized the same way I did in project 2 so that I could have a clearer understanding of where an employee falls on the pay scale. Table 1 describes the features I used.
+
+| Feature | Scale | Description |
+| ------- | ----- | --------------------------------------------- |
+| Pay | Ordinal | Representation of the pay range the employee falls within |
+| Agency | Nominal | Name of the agency the employee works for |
+| State | Nominal | State the employee is stationed at |
+| Age | Ordinal | Representation of the age range the employee falls within |
+| Education | Nominal | Encoded value with possible values of 1, 2, 3, and 4 representing the employee's education level |
+| Length of Service | Ordinal | Representation of the length of service range the employee falls within |
+| Category | Nominal | Describes the type of work the employee does |
+| Supervisory Status | Nominal | Represents the employee's level of authority |
+
+Table: Feature Descriptions
+
+## Transaction Datasets
+
+The first two subsets that I decided to use were 2005 data and 2013 data. These datasets will give me a good understanding of the changes between President Bush and President Obama's administrations as they occured during the middle of each respective president's terms.
+
+```{r 2005_item_freq, fig.cap='Item Frequency 2005'}
+itemFrequencyPlot(trans_2005, topN = 10)
+```
+
+```{r 2013_item_freq, fig.cap='Item Frequency 2013'}
+itemFrequencyPlot(trans_2013, topN = 10)
+```
+
+| Item 2005 | Count | Item 2013 | Count |
+| ---- | ----- | ---- | ----- |
+| Supervisory Status = 8 | 2381180 | Supervisory Status = 8 | 2859159 |
+| Education = 2 | 1349390 | LOS = [1, 10) | 1739704 |
+| Age = [15, 45) | 1096600 | Education = 2 | 1458559 |
+| LOS = [1, 10) | 1033255 | Age = [15, 45) | 1369648 |
+| Pay = 50000 | 1016877 | Category = P | 1113370
+
+
+Table: Most Frequent Items 2005 and 2013
+
+Both of the transaction datasets have only itemsets of length 8. This is because I had removed all NA's and unknowns in project 2. Figures 1 and 2 show the most frequent items that occur and a visualization of their frequencies. Table 2, on the other hand, shows fewer frequent items but also gives their counts. From this table and these figures, we can see that the majority of employees in the government are not supervisors and did not get at least a bachelor's degree.
+
+Other subsets of the data I was interested in creating transaction datasets for were records with a high school education and below as well as lengths of service less than 10 years long. This way, I can see if there is more interesting information pertaining to employees that we would typically expect to have a lower salary. These datasets were created by subsetting both 2005 and 2013 data.
+
+| Item 2005 | Count | Item 2013 | Count |
+| ---- | ----- | ---- | ----- |
+| Supervisory Status = 8 | 1222594 | Supervisory Status = 8 | 1317927
+| Pay = 50000 | 763357 | LOS = [1, 10) | 727845 |
+| Age = [15, 45) | 521217 | Pay = 50000 | 660267
+| Category = T | 512699 | Category = T | 545149
+
+Table: Frequent Items 2005 and 2013 for Low Education
+
+Table 3 shows the the large majority of low education employees do not hold any type of management position and make between \$25,000 and \$50,000.
+
+| Item 2005 | Count | Item 2013 | Count |
+| ---- | ----- | ---- | ----- |
+| Supervisory Status = 8 | 974394 | Supervisory Status = 8 | 1609143 | 
+| Age = [15, 45) | 658134 | Age = [15, 45) | 1030969 |
+| Pay = 50000 | 513058 | Education = 2 | 715949 |
+| Education = 2 | 471568 | agency = Vetern's Health Administration | 650989 |
+
+Table: Frequent Items 2005 and 2013 for Short LOS
+
+Table 4 continues the trend of non-managers being the majority which makes sense. However, in 2013, we see an agency on this list for the first time. Since we are only looking at employees that have worked in the government for less than 10 years, we can infer that this new addition is because the Veteran's health administration hired a lot of new employees during President Bush's term in office.
+
+# Modeling
+
+## Frequent Itemsets
+
+Frequent itemsets will show the itemsets that occur most often in the transaction datasets. I decided to set the minimum length of each itemset to 4 so that I can see which items occur most frequently together. The default settings would just give us basically the same information as tables 2, 3, and 3. I also lowered the support to 0.01 since it should be low because the information that I am looking for would usually be exceptions.
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{pay=50000,education=2,category=T,supervisory_status=8\} | 0.1506353 | 413071 |
+| \{pay=50000,age=[15,45),los=[ 1,10),supervisory_status=8\} | 0.1193742 | 327347 |
+| \{pay=50000,education=2,los=[ 1,10),supervisory_status=8\} | 0.1178207 | 323087 |
+| \{pay=50000,age=[15,45),education=2,supervisory_status=8\} | 0.1117715 | 306499 |
+| \{pay=50000,agency=VETERANS HEALTH ADMINISTRATION,education=2,supervisory_status=8\} | 0.1010782 | 277176 |
+
+Table: Frequent Itemsets 2005
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{pay=50000,education=2,los=[ 1,10),supervisory_status=8\} | 0.1241942 | 415435 |
+| \{age=[15,45),education=2,los=[ 1,10),supervisory_status=8\} | 0.1110694 | 371532 |
+| \{pay=50000,age=[15,45),los=[ 1,10),supervisory_status=8\} | 0.1081364 | 361721 |
+| \{pay=50000,education=2,category=T,supervisory_status=8\} | 0.1030447 | 344689 |
+| \{age=[15,45),los=[ 1,10),category=P,supervisory_status=8\} | 0.1020889 | 341492 |
+
+Table: Frequent Itemsets 2013
+
+Tables 5 and 6 show that a salary between \$25,000 and \$50,000 is very commonly found along with a lower education and no authority. This is exactly what is expected. One interesting point, however, is that a lot of these jobs are found at the Veteran's Health Administration(VHA). Although this might just be due to the VHA being one of the largest agencies in the government.
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{pay=50000,education=2,category=T,supervisory_status=8\} | 0.3055634 | 413071 |
+| \{pay=50000,education=2,los=[ 1,10),supervisory_status=8\} | 0.2389990 | 323087 |
+| \{pay=50000,age=[15,45),education=2,supervisory_status=8\} | 0.2267283 | 306499 |
+| \{pay=50000,agency=VETERANS HEALTH ADMINISTRATION,education=2,supervisory_status=8\} | 0.2050370 | 277176 |
+| \{age=[15,45),education=2,los=[ 1,10),supervisory_status=8\} | 0.2018088 | 272812 |
+
+Table: Frequent Itemsets 2005 for Low Education
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{pay=50000,education=2,los=[ 1,10),supervisory_status=8\} | 0.2819869 | 415435 |
+| \{age=[15,45),education=2,los=[ 1,10),supervisory_status=8\} | 0.2521867 | 371532 |
+| \{pay=50000,education=2,category=T,supervisory_status=8\} | 0.2339663 | 344689 |
+| \{pay=50000,agency=VETERANS HEALTH ADMINISTRATION,education=2,supervisory_status=8\} | 0.2071038 | 305114 |
+| \{pay=50000,age=[15,45),education=2,supervisory_status=8\} | 0.1869896 | 275481 |
+
+Table: Frequent Itemsets 2013 for Low Education
+
+Tables 7 and 8 show that not much changes between 2005 and 2013 in regards to low education employees. They typically do not have much authority and do not earn more than \$50,000 a year.
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{pay=50000,age=[15,45),los=[ 1,10),supervisory_status=8\} | 0.3168114 | 327347 |
+| \{pay=50000,education=2,los=[ 1,10),supervisory_status=8\} | 0.3126885 | 323087 |
+| \{age=[15,45),education=2,los=[ 1,10),supervisory_status=8\} | 0.2640316 | 272812 |
+| \{pay=50000,los=[ 1,10),category=T,supervisory_status=8\} | 0.2351675 | 242988 |
+| \{age=[15,45),los=[ 1,10),category=P,supervisory_status=8\} | 0.2077967 | 214707 |
+
+Table: Frequent Itemsets 2005 for Short LOS
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{pay=50000,education=2,los=[ 1,10),supervisory_status=8\} | 0.2387964 | 415435 |
+| \{age=[15,45),education=2,los=[ 1,10),supervisory_status=8\} | 0.2135605 | 371532 |
+| \{pay=50000,age=[15,45),los=[ 1,10),supervisory_status=8\} | 0.2079210 | 361721 |
+| \{age=[15,45),los=[ 1,10),category=P,supervisory_status=8\} | 0.1962932 | 341492 |
+| \{agency=VETERANS HEALTH ADMINISTRATION,age=[15,45),los=[ 1,10),supervisory_status=8\} | 0.1914234 | 333020 |
+
+Table: Frequent Itemsets 2013 for Short LOS
+
+Tables 9 and 10 show the same information as what we previously saw, lower education employees with no authority. However, the length of service does not have much to do with the education level of an employee so we can assume that these itemsets are just showing up because the market is saturated with people with these credentials. Table 10 also shows that the VHA item occurs more frequently than in 2005 for newer employees. This indicates a large number being hired recently.
+
+## Closed Itemsets
+
+Closed frequent itemsets are ones that have only immediate supersets with a lower support value. This will show us general features which reflects the same information that we have found so far. To gain more insight, I subsetted the low education data again to include only employees that have less than a bachelor's degree but also between \$50,000 and \$150,000 a year. I chose to cut it off at \$150,000 because those situations are likely to be extremely rare and hard to replicate. I also created these closed frequent itemsets with a minimum length of 2 so I could compare the relationships between items.
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{education=2,supervisory_status=8\} | 0.8279510 | 425845 |
+| \{education=2,category=A\} | 0.6461593 | 332343 |
+| \{pay=75000,education=2\} | 0.6391133 | 328719 |
+| \{pay=75000,supervisory_status=8\} | 0.5510620 | 283431 |
+| \{pay=75000,education=2,supervisory_status=8\} | 0.5503115 | 283045 |
+
+Table: Closed Itemsets 2005 for Low Education and High Pay
+
+| Items | Support | Count |
+| --------------------------------------------- | ---------- | ------ |
+| \{education=2,supervisory_status=8\} | 0.8320450 | 633648 |
+| \{pay=75000,education=2\} | 0.5821759 | 443359 |
+| \{education=2,category=A\} | 0.5320614 | 405194 |
+| \{pay=75000,supervisory_status=8\} | 0.5181543 | 394603 |
+| \{pay=75000,education=2,supervisory_status=8\} | 0.5132105 | 390838 |
+
+Table: Closed Itemsets 2013 for Low Education and High Pay
+
+Surprisingly, tables 11 and 12 show that not much changes in regards to the frequent items. A supervisory status of 8 is still the most common. However, we now see that a category value of A is also common. This makes sense since the most common category we saw previously was T as shown in table 7. We can assume then that administrative jobs pay more than technical jobs do for employees of the same education level.
+
+## Maximal Itemsets
+
+Maximal itemsets are the largest frequent itemsets. I looked at the maximal itemsets again for the 2005 and 2013 subsets of data that includes education values of 1 or 2 and pay between \$50,000 and \$150,000.
+
+| Items | Support | Count |
+| -------------------------------------------------------------- | ---------- | ------ |
+| \{pay=75000,age=[15,45),education=2,los=[10,20),category=A,supervisory_status=8\} | 0.05601008 | 28808 |
+| \{pay=1e+05,age=[55,75],education=2,los=[20,35],category=A,supervisory_status=8\} | 0.03287345 | 16908 |
+| \{pay=75000,agency=SOCIAL SECURITY ADMINISTRATION,age=[45,55),education=2,los=[20,35],category=A,supervisory_status=8\} | 0.03076199 | 15822 |
+| \{pay=75000,age=[15,45),education=2,los=[ 1,10),category=A,supervisory_status=8\} | 0.02843861 | 14627 |
+| \{pay=75000,age=[45,55),education=2,los=[20,35],category=T,supervisory_status=8\} | 0.02811781 | 14462 |
+
+Table: Maximal Itemsets 2005 for Low Education and High Pay
+
+| Items | Support | Count |
+| -------------------------------------------------------------- | ---------- | ------ |
+| \{pay=75000,age=[15,45),education=2,los=[ 1,10),category=A,supervisory_status=8\} | 0.04937398 | 37601 |
+| \{pay=75000,age=[45,55),education=2,los=[20,35],category=T,supervisory_status=8\} | 0.03495874 | 26623 |
+| \{pay=1e+05,age=[55,75],education=2,los=[20,35],category=A,supervisory_status=8\} | 0.03256758 | 24802 |
+| \{pay=1e+05,age=[45,55),education=2,los=[20,35],category=A,supervisory_status=8\} | 0.03179547 | 24214 |
+| \{agency=FEDERAL AVIATION ADMINISTRATION,age=[15,45),education=2,los=[ 1,10),category=A,supervisory_status=8\} | 0.03066489 | 23353 |
+
+Table: Maximal Itemsets 2013 for Low Education and High Pay
+
+Tables 13 and 14 finally show us some instances where the employee makes at least \$75,000 a year. However, these cases also include a length of service between 20 and 35 years which is not something a prospective employee can decide. The most interesting part of these maximal itemsets, though, is that the Federal Aviation Administration (FAA) appears in 2013 without a frequent pay item. It is also associated with a lower age bracket as well as a shorter length of service. Since we know that a salary between \$50,000 and \$75,000 is the most frequent in this transaction dataset and it does not occur here we can infer that employees working in the FAA are more likely to earn much more without needing much experience.
+
+## Association Rules
+
+When looking at association rules for the low education and high pay datasets, I decided to set the support value to 0.001 and the confidence to 0.9. This is because I am looking for rare occurances that happen consistently when they do occur to find reasons why some employees with lower qualifications are able to make high salaries. I chose a high confidence value so that only the occurances that happen consistently are shown.
+
+I first filtered the rules by rules that have pay on the right hand side and sorted by lift. However, doing this leaves only six rules.
+
+| lhs | rhs | support | confidence | lift | count |
+| ---------------------------------------- | ---------- | ------- | ------ | ------- | ------- |
+| \{education=2,category=T\} | => \{pay=75000\} | 0.1228283 | 0.9331748 | 1.458121 | 63175 |
+| \{category=T\} | => \{pay=75000\} | 0.1231082 | 0.9330966 | 1.457999 | 63319 |
+| \{agency=VETERANS HEALTH ADMINISTRATION,education=2,supervisory_status=8\} | => \{pay=75000\} | 0.1217842 | 0.8383254 | 1.309915 | 62638 |
+| \{agency=VETERANS HEALTH ADMINISTRATION,supervisory_status=8\} | => \{pay=75000\} | 0.1218250 | 0.8382924 | 1.309864 | 62659 |
+| \{agency=VETERANS HEALTH ADMINISTRATION,education=2\} | => \{pay=75000\} | 0.1403732 | 0.8260188 | 1.290686 | 72199 |
+
+Table: Rules for 2005 Low Education and High Pay
+
+Table 15 shows that the only pay found to the right hand side has a value of 75000. In addition, the VHA and technical category show up the most. The lift for these rules are well above 1. This means that the itemsets in each rule are highly coorelated. However, there are only six rules and all of them are at the lower end of the pay spectrum we are looking at. Therefore, I will also look at association rules for the complete dataset.
+
+```{r 2005_edu_rules_scatter, fig.cap='Association Rules Scatterplot 2005 for Low Education and High Pay'}
+plot(rules_edu_2005, control=list(jitter=.5))
+```
+
+```{r 2013_edu_rules_scatter, fig.cap='Association Rules Scatterplot 2013 for Low Education and High Pay'}
+plot(rules_edu_2013, control=list(jitter=.5))
+```
+
+Figures 3 and 4 show that the association rules for low education and high pay generally have low support and a wide range of confidence values. This makes sense since there are many different items that can make up the itemsets and it is unlikely they would be present in most of the dataset. However, figure 4 also shows that the lift values for 2013 are generally much higher than 2005. 
+
+In addition to the association rules of the more specific datasets above, I also decided to mine association rules for the general 2005 and 2013 datasets to examine differences between the two presidential terms.
+
+| lhs | rhs | support | confidence | lift | count |
+| ---------------------------------------- | ---------- | ------- | ------ | ------- | ------- |
+| \{pay=1e+05,agency=GEORGE C. MARSHALL SPACE FLIGHT CENTER\} | => \{state=ALABAMA\} | 0.001482026 | 0.9866472 | 66.30667 | 4064 |
+| \{pay=1e+05,agency=GEORGE C. MARSHALL SPACE FLIGHT CENTER,category=P\} | => \{state=ALABAMA\} | 0.001301513 | 0.9861840 | 66.27554 | 3569 |
+| \{pay=1e+05,agency=GEORGE C. MARSHALL SPACE FLIGHT CENTER,supervisory_status=8\} | => \{state=ALABAMA\} | 0.001309171 | 0.9859929 | 66.26269 | 3590 |
+| \{agency=GEORGE C. MARSHALL SPACE FLIGHT CENTER,age=[45,55)\} | => \{state=ALABAMA\} | 0.001037126 | 0.9857886 | 66.24896 | 2844 |
+| \{pay=1e+05,agency=GEORGE C. MARSHALL SPACE FLIGHT CENTER,category=P,supervisory_status=8\} | => \{state=ALABAMA\} | 0.001156374 | 0.9847482 | 66.17904 | 3422 |
+
+Table: Rules for 2005 with Highest Lift
+
+| lhs | rhs | support | confidence | lift | count |
+| ---------------------------------------- | ---------- | ------- | ------ | ------- | ------- |
+| \{pay=150000,state=VIRGINIA,education=3,category=P,supervisory_status=8\} | => \{agency=PATENT AND TRADEMARK OFFICE\} | 0.001020016 | 0.9137654 | 70.57948 | 3412 |
+| \{education=1,los=[ 1,10),category=P\} | => \{agency=OFC SEC HEALTH AND HUMAN SERVICES\} | 0.001361716 | 0.9741232 | 55.73108 | 4555 |
+| \{education=1,los=[ 1,10),category=P,supervisory_status=8\} | => \{agency=OFC SEC HEALTH AND HUMAN SERVICES\} | 0.001167997 | 0.9721324 | 55.61718 | 3907 |
+| \{age=[55,75],education=1,los=[ 1,10)\} | => \{agency=OFC SEC HEALTH AND HUMAN SERVICES\} | 0.001423001 | 0.9500998 | 54.35667 | 4760 |
+| \{age=[55,75],education=1,los=[ 1,10),supervisory_status=8\} | => \{agency=OFC SEC HEALTH AND HUMAN SERVICES\} | 0.001249909 | 0.9442186 | 54.02020 | 4181 |
+
+Table: Rules for 2013 with Highest Lift
+
+Table 16 shows that rules with the highest lift are concentrated on employees that work in Alabama. This is due to the specific flight center that is located in Alabama. Table 17 shows us a little more information but it is concentrated on the OFC SEC Health and Human Services. This could indicate a large increase in the number of employees in this agency.
+
+```{r 2005_rules_scatter, fig.cap='Association Rules Scatterplot 2005'}
+plot(rules_2005, control=list(jitter=.5))
+```
+
+```{r 2013_rules_scatter, fig.cap='Association Rules Scatterplot 2013'}
+plot(rules_2013, control=list(jitter=.5))
+```
+
+Figures 5 and 6 are similar to figures 3 and 4 in that the support is typically low for the rules with a high variance in confidence. However neither figure 5 nor 6 has a large number of rules with high lift. The rules with high lift for figure 5 have similar confidence values in comparision to figure to where the rules have a high variance in confidence. This reflects the change we see from table 16 to table 17 where the focus shifts from one agency to another.
+
+# Evaluation
+
+In this investigation, I found trends that I had expected such as lower income employees typically have a lower education level, no authority, and a shorter length of service. However, I also found that employees with a lower education level make more in administrative jobs in comparison to technical jobs. As such, prospective employees that cannot continue their education to get a bachelor's degree should aim to get an administrative job.
+
+In addition, employees that worked in the Federal Aviation Administration seem to make more money with lower education levels and shorter lengths of service, even without a managerial position. Therefore, less competitive prospective employees should also aim to get a job within the FAA.
+
+\pagebreak
+
+# Citations
+
+Hadley Wickham (2017). tidyverse: Easily Install and Load 'Tidyverse' Packages. R package version 1.1.1.
+  https://CRAN.R-project.org/package=tidyverse
+  
+
+Michael Hahsler, Christian Buchta, Bettina Gruen and Kurt Hornik (2017). arules: Mining Association Rules and
+  Frequent Itemsets. R package version 1.5-4. https://CRAN.R-project.org/package=arules
